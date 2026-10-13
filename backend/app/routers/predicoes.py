@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -8,10 +9,17 @@ from ..schemas import PredicaoCreate, PredicaoOut, PredicaoUpdate
 router=APIRouter(prefix="/predicoes",tags=["Predições"])
 
 @router.get("",response_model=list[PredicaoOut])
-def list_all(_:Usuario=Depends(current_user),db:Session=Depends(get_db)):return db.query(Predicao).order_by(Predicao.data_predicao.desc()).all()
+def list_all(_:Usuario=Depends(current_user),db:Session=Depends(get_db)):
+    return db.query(Predicao).order_by(Predicao.data_compra.desc()).all()
+
 @router.post("",response_model=PredicaoOut,status_code=201)
 def create(data:PredicaoCreate,_:Usuario=Depends(current_user),db:Session=Depends(get_db)):
-    obj=Predicao(**data.model_dump());db.add(obj);db.commit();db.refresh(obj);return obj
+    dump = data.model_dump()
+    if not dump.get("data_previsao") and dump.get("data_compra") and dump.get("dias_previstos"):
+        dump["data_previsao"] = dump["data_compra"] + timedelta(days=dump["dias_previstos"])
+    elif not dump.get("data_previsao") and dump.get("data_compra"):
+        dump["data_previsao"] = dump["data_compra"]
+    obj=Predicao(**dump);db.add(obj);db.commit();db.refresh(obj);return obj
 @router.get("/{id_predicao}",response_model=PredicaoOut)
 def get(id_predicao:int,_:Usuario=Depends(current_user),db:Session=Depends(get_db)):
     obj=db.get(Predicao,id_predicao)

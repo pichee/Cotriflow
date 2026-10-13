@@ -11,7 +11,7 @@ const resources = {
     ['nome','Nome','text'], ['documento','CPF/CNPJ','text'], ['telefone','Telefone','text'], ['email','E-mail','email']
   ]},
   propriedades: { title: 'Propriedades', endpoint: '/propriedades', icon: Building2, fields: [
-    ['nome','Nome da propriedade','text'], ['localizacao','Localização','text'], ['cliente_id','ID do cliente','number']
+    ['nome','Nome da propriedade','text'], ['localizacao','Localização','text'], ['id_cliente','ID do cliente','number']
   ]},
   produtos: { title: 'Produtos', endpoint: '/produtos', icon: Package, fields: [
     ['nome','Nome','text'], ['tipo','Tipo','text'], ['peso_unidade','Peso por unidade','number']
@@ -20,7 +20,13 @@ const resources = {
     ['nome','Nome','text'], ['email','E-mail','email'], ['senha','Senha','password'], ['tipo_usuario','Perfil (ADMIN/VENDEDOR)','text']
   ]},
   predicoes: { title: 'Predições', endpoint: '/predicoes', icon: Sparkles, fields: [
-    ['cliente_id','ID do cliente','number'], ['data_predicao','Data da previsão','date']
+    ['cliente','Cliente','text'],
+    ['animal','Animal','text'],
+    ['quantidade_kg','Qtd (Kg)','number'],
+    ['data_compra','Data Compra','date'],
+    ['dias_previstos','Prev. Dias','number'],
+    ['data_previsao','Data Prevista','date'],
+    ['data_real','Data Real','date']
   ]}
 }
 
@@ -128,22 +134,47 @@ const linksQuick=[['/clientes','Clientes',Users],['/propriedades','Propriedades'
 
 function Stat({icon:Icon,label,value,to}) { return <Link to={to} className="stat"><div className="stat-icon"><Icon size={22}/></div><div><span>{label}</span><strong>{value}</strong></div></Link> }
 
+function formatCell(val, type) {
+  if (val === null || val === undefined || val === '') return '—'
+  if (type === 'date') {
+    if (typeof val === 'string') {
+      const first = val.replace('T', ' ').split(' ')[0]
+      if (first && first.length === 10) return first
+    }
+    const d = new Date(val)
+    if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10)
+  }
+  return String(val)
+}
+
 function CrudPage({kind}) {
   const cfg=resources[kind], [rows,setRows]=useState([]), [loading,setLoading]=useState(true), [editing,setEditing]=useState(null), [q,setQ]=useState('')
   const [error,setError]=useState('')
+  const [page,setPage]=useState(1)
+  const pageSize=20
   async function load(){setLoading(true);try{const {data}=await api.get(cfg.endpoint);setRows(Array.isArray(data)?data:[])}catch(e){setError(e.response?.data?.detail||'Erro ao carregar.')}finally{setLoading(false)}}
   useEffect(()=>{load()},[])
   const filtered=useMemo(()=>rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase())),[rows,q])
+  useEffect(()=>{setPage(1)},[q])
+  const totalPages=Math.ceil(filtered.length/pageSize)||1
+  const paginated=useMemo(()=>filtered.slice((page-1)*pageSize,page*pageSize),[filtered,page])
   async function remove(id){if(!confirm('Excluir este registro?'))return;try{await api.delete(`${cfg.endpoint}/${id}`);load()}catch(e){alert(e.response?.data?.detail||'Não foi possível excluir.')} }
   return <div>
     <div className="page-head"><div><span className="eyebrow">CADASTRO</span><h1>{cfg.title}</h1><p>Gerencie os registros de {cfg.title.toLowerCase()}.</p></div><button className="primary" onClick={()=>setEditing({})}>+ Novo</button></div>
     <div className="toolbar"><input placeholder={`Pesquisar ${cfg.title.toLowerCase()}...`} value={q} onChange={e=>setQ(e.target.value)}/></div>
     {error&&<div className="error">{error}</div>}
     <div className="table-wrap"><table><thead><tr>{cfg.fields.filter(f=>f[0]!=='senha').map(f=><th key={f[0]}>{f[1]}</th>)}<th>Ações</th></tr></thead><tbody>
-      {loading?<tr><td colSpan="10" className="empty">Carregando...</td></tr>:filtered.length===0?<tr><td colSpan="10" className="empty">Nenhum registro encontrado.</td></tr>:filtered.map(r=><tr key={r.id||r.id_usuario||r.id_cliente||r.id_propriedade||r.id_produto||r.id_predicao}>
-        {cfg.fields.filter(f=>f[0]!=='senha').map(f=><td key={f[0]}>{String(r[f[0]]??'—')}</td>)}<td><button className="link-btn" onClick={()=>setEditing(r)}>Editar</button><button className="danger-btn" onClick={()=>remove(r.id||r.id_usuario||r.id_cliente||r.id_propriedade||r.id_produto||r.id_predicao)}>Excluir</button></td>
+      {loading?<tr><td colSpan="10" className="empty">Carregando...</td></tr>:filtered.length===0?<tr><td colSpan="10" className="empty">Nenhum registro encontrado.</td></tr>:paginated.map(r=><tr key={r.id||r.id_usuario||r.id_cliente||r.id_propriedade||r.id_produto||r.id_predicao}>
+        {cfg.fields.filter(f=>f[0]!=='senha').map(f=><td key={f[0]}>{formatCell(r[f[0]], f[2])}</td>)}<td><button className="link-btn" onClick={()=>setEditing(r)}>Editar</button><button className="danger-btn" onClick={()=>remove(r.id||r.id_usuario||r.id_cliente||r.id_propriedade||r.id_produto||r.id_predicao)}>Excluir</button></td>
       </tr>)}
     </tbody></table></div>
+    {filtered.length>pageSize&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,flexWrap:'wrap',gap:8}}>
+      <span className="muted">Total: {filtered.length} registros (Página {page} de {totalPages})</span>
+      <div style={{display:'flex',gap:8}}>
+        <button className="secondary" disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Anterior</button>
+        <button className="secondary" disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)}>Próxima</button>
+      </div>
+    </div>}
     {editing!==null&&<FormModal cfg={cfg} value={editing} onClose={()=>setEditing(null)} onSaved={()=>{setEditing(null);load()}}/>}
   </div>
 }
@@ -155,11 +186,12 @@ function FormModal({cfg,value,onClose,onSaved}) {
     const id=form.id||form.id_usuario||form.id_cliente||form.id_propriedade||form.id_produto||form.id_predicao
     const data={...form}
     for(const k of Object.keys(data)) if(data[k]==='') delete data[k]
+    if(!id && data.data_predicao) delete data.data_predicao
     if(id) await api.put(`${cfg.endpoint}/${id}`,data); else await api.post(cfg.endpoint,data)
     onSaved()
   }catch(e){setError(e.response?.data?.detail||'Erro ao salvar.')}finally{setSaving(false)}}
-  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><h3>{(value.id||value.id_usuario||value.id_cliente)?'Editar':'Novo'} {cfg.title.slice(0,-1)}</h3><button className="icon" onClick={onClose}><X/></button></div>
-  <form onSubmit={submit}>{cfg.fields.map(([key,label,type])=><label key={key}>{label}<input type={type} value={form[key]??''} onChange={e=>set(key,type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value)} required={!value[key]&&key!=='senha'}/></label>)}{error&&<div className="error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={saving}>{saving?'Salvando...':'Salvar'}</button></div></form></div></div>
+  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><h3>{(value.id||value.id_usuario||value.id_cliente||value.id_predicao)?'Editar':'Novo'} {cfg.title.slice(0,-1)}</h3><button className="icon" onClick={onClose}><X/></button></div>
+  <form onSubmit={submit}>{cfg.fields.map(([key,label,type])=><label key={key}>{label}<input type={type} value={form[key]??''} onChange={e=>set(key,type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value)} required={!value[key]&&key!=='senha'&&key!=='observacao'&&key!=='data_real'&&key!=='dias_previstos'&&key!=='data_previsao'}/></label>)}{error&&<div className="error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={saving}>{saving?'Salvando...':'Salvar'}</button></div></form></div></div>
 }
 
 function Pedidos() {

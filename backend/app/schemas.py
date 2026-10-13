@@ -106,13 +106,37 @@ class PedidoOut(BaseModel):
     produtos: list[PedidoProdutoOut]
 
 
+class PredicaoBase(BaseModel):
+    cliente: str
+    animal: str | None = None
+    quantidade_kg: float | None = None
+    data_compra: datetime
+    dias_previstos: int | None = None
+    data_previsao: datetime
+    data_real: datetime | None = None
+    observacao: str | None = None
+
 class PredicaoCreate(BaseModel):
     cliente: str
+    animal: str | None = None
+    quantidade_kg: float | None = None
+    data_compra: datetime
+    dias_previstos: int | None = None
+    data_previsao: datetime | None = None
+    data_real: datetime | None = None
     observacao: str | None = None
+
 class PredicaoUpdate(BaseModel):
     cliente: str | None = None
+    animal: str | None = None
+    quantidade_kg: float | None = None
+    data_compra: datetime | None = None
+    dias_previstos: int | None = None
+    data_previsao: datetime | None = None
+    data_real: datetime | None = None
     observacao: str | None = None
-class PredicaoOut(PredicaoCreate):
+
+class PredicaoOut(PredicaoBase):
     model_config = ConfigDict(from_attributes=True)
     id_predicao: int
-    data_predicao: datetime
+

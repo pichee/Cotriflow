@@ -92,6 +92,12 @@ class Pedido(Base):
 class Predicao(Base):
     __tablename__ = "predicoes"
     id_predicao: Mapped[int] = mapped_column(primary_key=True)
-    data_predicao: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), nullable=False)
     cliente: Mapped[str] = mapped_column(String(160), nullable=False)
+    animal: Mapped[str | None] = mapped_column(String(80))
+    quantidade_kg: Mapped[float | None] = mapped_column(Float)
+    data_compra: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    dias_previstos: Mapped[int | None] = mapped_column(Integer)
+    data_previsao: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    data_real: Mapped[datetime | None] = mapped_column(DateTime)
     observacao: Mapped[str | None] = mapped_column(Text)
+
