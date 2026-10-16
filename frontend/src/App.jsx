@@ -7,19 +7,19 @@ import {
 import api from './api'
 
 const resources = {
-  clientes: { title: 'Clientes', endpoint: '/clientes', icon: Users, fields: [
+  clientes: { title: 'Clientes', singular: 'Cliente', gender: 'm', endpoint: '/clientes', icon: Users, fields: [
     ['nome','Nome','text'], ['documento','CPF/CNPJ','text'], ['telefone','Telefone','text'], ['email','E-mail','email']
   ]},
-  propriedades: { title: 'Propriedades', endpoint: '/propriedades', icon: Building2, fields: [
+  propriedades: { title: 'Propriedades', singular: 'Propriedade', gender: 'f', endpoint: '/propriedades', icon: Building2, fields: [
     ['nome','Nome da propriedade','text'], ['localizacao','Localização','text'], ['id_cliente','ID do cliente','number']
   ]},
-  produtos: { title: 'Produtos', endpoint: '/produtos', icon: Package, fields: [
+  produtos: { title: 'Produtos', singular: 'Produto', gender: 'm', endpoint: '/produtos', icon: Package, fields: [
     ['nome','Nome','text'], ['tipo','Tipo','text'], ['peso_unidade','Peso por unidade','number']
   ]},
-  usuarios: { title: 'Usuários', endpoint: '/usuarios', icon: UserRound, fields: [
+  usuarios: { title: 'Usuários', singular: 'Usuário', gender: 'm', endpoint: '/usuarios', icon: UserRound, fields: [
     ['nome','Nome','text'], ['email','E-mail','email'], ['senha','Senha','password'], ['tipo_usuario','Perfil (ADMIN/VENDEDOR)','text']
   ]},
-  predicoes: { title: 'Predições', endpoint: '/predicoes', icon: Sparkles, fields: [
+  predicoes: { title: 'Predições', singular: 'Predição', gender: 'f', endpoint: '/predicoes', icon: Sparkles, fields: [
     ['cliente','Cliente','text'],
     ['animal','Animal','text'],
     ['quantidade_kg','Qtd (Kg)','number'],
@@ -153,14 +153,14 @@ function CrudPage({kind}) {
   const [page,setPage]=useState(1)
   const pageSize=20
   async function load(){setLoading(true);try{const {data}=await api.get(cfg.endpoint);setRows(Array.isArray(data)?data:[])}catch(e){setError(e.response?.data?.detail||'Erro ao carregar.')}finally{setLoading(false)}}
-  useEffect(()=>{load()},[])
+  useEffect(()=>{setQ('');setPage(1);setError('');setEditing(null);load()},[kind])
   const filtered=useMemo(()=>rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase())),[rows,q])
   useEffect(()=>{setPage(1)},[q])
   const totalPages=Math.ceil(filtered.length/pageSize)||1
   const paginated=useMemo(()=>filtered.slice((page-1)*pageSize,page*pageSize),[filtered,page])
   async function remove(id){if(!confirm('Excluir este registro?'))return;try{await api.delete(`${cfg.endpoint}/${id}`);load()}catch(e){alert(e.response?.data?.detail||'Não foi possível excluir.')} }
   return <div>
-    <div className="page-head"><div><span className="eyebrow">CADASTRO</span><h1>{cfg.title}</h1><p>Gerencie os registros de {cfg.title.toLowerCase()}.</p></div><button className="primary" onClick={()=>setEditing({})}>+ Novo</button></div>
+    <div className="page-head"><div><span className="eyebrow">CADASTRO</span><h1>{cfg.title}</h1><p>Gerencie os registros de {cfg.title.toLowerCase()}.</p></div><button className="primary" onClick={()=>setEditing({})}>+ {cfg.gender === 'f' ? 'Nova' : 'Novo'} {cfg.singular || (cfg.title.endsWith('ões') ? cfg.title.slice(0, -3) + 'ão' : cfg.title.slice(0, -1))}</button></div>
     <div className="toolbar"><input placeholder={`Pesquisar ${cfg.title.toLowerCase()}...`} value={q} onChange={e=>setQ(e.target.value)}/></div>
     {error&&<div className="error">{error}</div>}
     <div className="table-wrap"><table><thead><tr>{cfg.fields.filter(f=>f[0]!=='senha').map(f=><th key={f[0]}>{f[1]}</th>)}<th>Ações</th></tr></thead><tbody>
@@ -180,18 +180,139 @@ function CrudPage({kind}) {
 }
 
 function FormModal({cfg,value,onClose,onSaved}) {
-  const [form,setForm]=useState({...value}),[saving,setSaving]=useState(false),[error,setError]=useState('')
-  function set(k,v){setForm(x=>({...x,[k]:v}))}
-  async function submit(e){e.preventDefault();setSaving(true);setError('');try{
-    const id=form.id||form.id_usuario||form.id_cliente||form.id_propriedade||form.id_produto||form.id_predicao
-    const data={...form}
-    for(const k of Object.keys(data)) if(data[k]==='') delete data[k]
-    if(!id && data.data_predicao) delete data.data_predicao
-    if(id) await api.put(`${cfg.endpoint}/${id}`,data); else await api.post(cfg.endpoint,data)
-    onSaved()
-  }catch(e){setError(e.response?.data?.detail||'Erro ao salvar.')}finally{setSaving(false)}}
-  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><h3>{(value.id||value.id_usuario||value.id_cliente||value.id_predicao)?'Editar':'Novo'} {cfg.title.slice(0,-1)}</h3><button className="icon" onClick={onClose}><X/></button></div>
-  <form onSubmit={submit}>{cfg.fields.map(([key,label,type])=><label key={key}>{label}<input type={type} value={form[key]??''} onChange={e=>set(key,type==='number'?(e.target.value===''?'':Number(e.target.value)):e.target.value)} required={!value[key]&&key!=='senha'&&key!=='observacao'&&key!=='data_real'&&key!=='dias_previstos'&&key!=='data_previsao'}/></label>)}{error&&<div className="error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={saving}>{saving?'Salvando...':'Salvar'}</button></div></form></div></div>
+  const isPred = cfg.endpoint === '/predicoes'
+  const isEdit = Boolean(value.id || value.id_usuario || value.id_cliente || value.id_propriedade || value.id_produto || value.id_predicao)
+  const singularName = cfg.singular || (cfg.title.endsWith('ões') ? cfg.title.slice(0, -3) + 'ão' : cfg.title.slice(0, -1))
+  const titlePrefix = isEdit ? 'Editar' : (cfg.gender === 'f' ? 'Nova' : 'Novo')
+
+  const [form, setForm] = useState(() => {
+    const init = { ...value }
+    for (const [k, , t] of cfg.fields) {
+      if (t === 'date' && init[k]) {
+        const fmt = formatCell(init[k], 'date')
+        init[k] = fmt === '—' ? '' : fmt
+      }
+    }
+    return init
+  })
+  const [calculating, setCalculating] = useState(false)
+  const [saving, setSaving] = useState(false), [error, setError] = useState('')
+
+  function set(k, v) {
+    setForm(x => ({ ...x, [k]: v }))
+  }
+
+  // Em predições, dias_previstos e data_previsao são calculados pela IA,
+  // e data_real é preenchida automaticamente com a data da próxima compra do cliente.
+  const formFields = useMemo(() => {
+    if (!isPred) return cfg.fields
+    return cfg.fields.filter(([k]) => k !== 'dias_previstos' && k !== 'data_previsao' && k !== 'data_real')
+  }, [isPred, cfg.fields])
+
+  useEffect(() => {
+    if (!isPred) return
+    if (!form.cliente || !form.data_compra || form.quantidade_kg === undefined || form.quantidade_kg === '') return
+    let active = true
+    setCalculating(true)
+    const timer = setTimeout(() => {
+      api.post('/predicoes/calcular', {
+        cliente: String(form.cliente),
+        animal: form.animal || null,
+        quantidade_kg: Number(form.quantidade_kg),
+        data_compra: form.data_compra,
+        id_predicao: form.id_predicao || null
+      }).then(({ data }) => {
+        if (active) {
+          setForm(x => ({ ...x, dias_previstos: data.dias_previstos, data_previsao: data.data_previsao }))
+        }
+      }).catch(() => {})
+        .finally(() => {
+          if (active) setCalculating(false)
+        })
+    }, 250)
+    return () => { active = false; clearTimeout(timer) }
+  }, [isPred, form.cliente, form.animal, form.quantidade_kg, form.data_compra, form.id_predicao])
+
+  async function submit(e) {
+    e.preventDefault()
+    setSaving(true)
+    setError('')
+    try {
+      const id = form.id || form.id_usuario || form.id_cliente || form.id_propriedade || form.id_produto || form.id_predicao
+      const data = { ...form }
+      for (const k of Object.keys(data)) if (data[k] === '') delete data[k]
+      if (!id && data.data_predicao) delete data.data_predicao
+      if (id) await api.put(`${cfg.endpoint}/${id}`, data)
+      else await api.post(cfg.endpoint, data)
+      onSaved()
+    } catch (e) {
+      setError(e.response?.data?.detail || 'Erro ao salvar.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return <div className="modal-backdrop"><div className="modal"><div className="modal-head"><h3>{titlePrefix} {singularName}</h3><button className="icon" onClick={onClose}><X/></button></div>
+  <form onSubmit={submit}>
+    {isPred && <datalist id="animais-cotriflow">{['Aves', 'Bovinos', 'Equinos', 'Ovinos', 'Peixes', 'Suinos'].map(a => <option key={a} value={a}/>)}</datalist>}
+    {formFields.map(([key, label, type]) => (
+      <label key={key}>
+        {label}
+        <input
+          type={type}
+          list={isPred && key === 'animal' ? 'animais-cotriflow' : undefined}
+          value={form[key] ?? ''}
+          onChange={e => set(key, type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
+          required={!value[key] && key !== 'senha' && key !== 'observacao' && key !== 'data_real'}
+        />
+      </label>
+    ))}
+
+    {isPred && (
+      <div style={{
+        background: 'rgba(27, 77, 62, 0.05)',
+        border: '1px solid rgba(27, 77, 62, 0.18)',
+        borderRadius: 8,
+        padding: '12px 14px',
+        marginTop: 6,
+        marginBottom: 12
+      }}>
+        <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#1b4d3e', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Previsão Automática (IA CotriFlow)</span>
+          {calculating && <span style={{ fontSize: 11, color: '#6b7280', textTransform: 'none', fontWeight: 400 }}>Calculando modelo...</span>}
+        </div>
+        {form.dias_previstos && form.data_previsao ? (
+          <div style={{ marginTop: 8, fontSize: 14, color: '#1f2937', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14 }}>
+              <div>
+                <span style={{ color: '#4b5563', fontSize: 12, display: 'block' }}>Dias Previstos</span>
+                <strong style={{ fontSize: 16, color: '#1b4d3e' }}>{form.dias_previstos} dias</strong>
+              </div>
+              <div>
+                <span style={{ color: '#4b5563', fontSize: 12, display: 'block' }}>Data Prevista</span>
+                <strong style={{ fontSize: 16, color: '#111827' }}>{formatCell(form.data_previsao, 'date')}</strong>
+              </div>
+            </div>
+            {form.data_real && (
+              <div style={{ fontSize: 13, color: '#374151', borderTop: '1px dashed rgba(27,77,62,0.2)', paddingTop: 6 }}>
+                Próxima compra realizada (Data Real): <strong>{formatCell(form.data_real, 'date')}</strong>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
+            Preencha Cliente, Qtd e Data da Compra para gerar a previsão automaticamente pelo algoritmo.
+          </div>
+        )}
+      </div>
+    )}
+
+    {error && <div className="error">{error}</div>}
+    <div className="modal-actions">
+      <button type="button" className="secondary" onClick={onClose}>Cancelar</button>
+      <button className="primary" disabled={saving}>{saving ? 'Salvando...' : 'Salvar'}</button>
+    </div>
+  </form></div></div>
 }
 
 function Pedidos() {
