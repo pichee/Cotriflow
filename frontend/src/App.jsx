@@ -5,6 +5,7 @@ import {
   Menu, Package, Settings, ShoppingCart, Sparkles, Truck, UserRound, Users, X
 } from 'lucide-react'
 import api from './api'
+import { isValidDocument, isValidEmail, normalizeDocument, normalizeEmail } from './validators'
 
 const resources = {
   clientes: { title: 'Clientes', singular: 'Cliente', gender: 'm', endpoint: '/clientes', icon: Users, fields: [
@@ -17,7 +18,7 @@ const resources = {
     ['nome','Nome','text'], ['tipo','Tipo','text'], ['peso_unidade','Peso por unidade','number']
   ]},
   usuarios: { title: 'Usuários', singular: 'Usuário', gender: 'm', endpoint: '/usuarios', icon: UserRound, fields: [
-    ['nome','Nome','text'], ['email','E-mail','email'], ['senha','Senha','password'], ['tipo_usuario','Perfil (ADMIN/VENDEDOR)','text']
+    ['nome','Nome','text'], ['documento','CPF/CNPJ','text'], ['email','E-mail','email'], ['senha','Senha','password'], ['tipo_usuario','Perfil (ADMIN/VENDEDOR)','text']
   ]},
   predicoes: { title: 'Predições', singular: 'Predição', gender: 'f', endpoint: '/predicoes', icon: Sparkles, fields: [
     ['cliente','Cliente','text'],
@@ -34,6 +35,13 @@ function getUser() {
   try { return JSON.parse(localStorage.getItem('cotriflow_user') || 'null') } catch { return null }
 }
 
+function apiError(error, fallback) {
+  const detail = error.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) return detail.map(item => item.msg).filter(Boolean).join(' ') || fallback
+  return fallback
+}
+
 function Protected({ children }) {
   return localStorage.getItem('cotriflow_token') ? children : <Navigate to="/login" replace />
 }
@@ -47,10 +55,15 @@ function Login() {
 
   async function submit(e) {
     e.preventDefault()
+    const normalizedEmail = normalizeEmail(email)
+    if (!isValidEmail(normalizedEmail)) {
+      setError('Informe um e-mail válido.')
+      return
+    }
     setLoading(true); setError('')
     try {
       const body = new URLSearchParams()
-      body.append('username', email); body.append('password', password)
+      body.append('username', normalizedEmail); body.append('password', password)
       const { data } = await api.post('/auth/login', body, {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       })
@@ -59,7 +72,7 @@ function Login() {
       localStorage.setItem('cotriflow_user', JSON.stringify(me))
       nav('/')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Não foi possível entrar.')
+      setError(apiError(err, 'Não foi possível entrar.'))
     } finally { setLoading(false) }
   }
 
@@ -235,18 +248,28 @@ function FormModal({cfg,value,onClose,onSaved}) {
 
   async function submit(e) {
     e.preventDefault()
-    setSaving(true)
     setError('')
+    if (form.documento && !isValidDocument(form.documento)) {
+      setError('Informe um CPF ou CNPJ válido.')
+      return
+    }
+    if (form.email && !isValidEmail(form.email)) {
+      setError('Informe um e-mail válido.')
+      return
+    }
+    setSaving(true)
     try {
       const id = form.id || form.id_usuario || form.id_cliente || form.id_propriedade || form.id_produto || form.id_predicao
       const data = { ...form }
       for (const k of Object.keys(data)) if (data[k] === '') delete data[k]
+      if (data.documento) data.documento = normalizeDocument(data.documento)
+      if (data.email) data.email = normalizeEmail(data.email)
       if (!id && data.data_predicao) delete data.data_predicao
       if (id) await api.put(`${cfg.endpoint}/${id}`, data)
       else await api.post(cfg.endpoint, data)
       onSaved()
     } catch (e) {
-      setError(e.response?.data?.detail || 'Erro ao salvar.')
+      setError(apiError(e, 'Erro ao salvar.'))
     } finally {
       setSaving(false)
     }
@@ -260,6 +283,8 @@ function FormModal({cfg,value,onClose,onSaved}) {
         {label}
         <input
           type={type}
+          inputMode={key === 'documento' ? 'numeric' : undefined}
+          maxLength={key === 'documento' ? 18 : undefined}
           list={isPred && key === 'animal' ? 'animais-cotriflow' : undefined}
           value={form[key] ?? ''}
           onChange={e => set(key, type === 'number' ? (e.target.value === '' ? '' : Number(e.target.value)) : e.target.value)}
