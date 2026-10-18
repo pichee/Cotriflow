@@ -1,6 +1,7 @@
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from .models import TipoUsuario, StatusPedido
+from .validators import normalize_document, normalize_email
 
 
 class UsuarioBase(BaseModel):
@@ -10,8 +11,18 @@ class UsuarioBase(BaseModel):
     tipo_usuario: TipoUsuario = TipoUsuario.VENDEDOR
     ativo: bool = True
 
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        return normalize_email(value)
+
 class UsuarioCreate(UsuarioBase):
     senha: str = Field(min_length=6)
+
+    @field_validator("documento")
+    @classmethod
+    def validate_documento(cls, value: str | None) -> str | None:
+        return normalize_document(value)
 
 class UsuarioUpdate(BaseModel):
     nome: str | None = None
@@ -20,6 +31,16 @@ class UsuarioUpdate(BaseModel):
     tipo_usuario: TipoUsuario | None = None
     ativo: bool | None = None
     senha: str | None = Field(default=None, min_length=6)
+
+    @field_validator("documento")
+    @classmethod
+    def validate_documento(cls, value: str | None) -> str | None:
+        return normalize_document(value)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        return normalize_email(value)
 
 class UsuarioOut(UsuarioBase):
     model_config = ConfigDict(from_attributes=True)
@@ -37,13 +58,33 @@ class ClienteBase(BaseModel):
     telefone: str | None = None
     email: EmailStr | None = None
     observacoes: str | None = None
-class ClienteCreate(ClienteBase): pass
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        return normalize_email(value)
+class ClienteCreate(ClienteBase):
+    @field_validator("documento")
+    @classmethod
+    def validate_documento(cls, value: str | None) -> str | None:
+        return normalize_document(value)
+
 class ClienteUpdate(BaseModel):
     nome: str | None = None
     documento: str | None = None
     telefone: str | None = None
     email: EmailStr | None = None
     observacoes: str | None = None
+
+    @field_validator("documento")
+    @classmethod
+    def validate_documento(cls, value: str | None) -> str | None:
+        return normalize_document(value)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        return normalize_email(value)
 class ClienteOut(ClienteBase):
     model_config = ConfigDict(from_attributes=True)
     id_cliente: int

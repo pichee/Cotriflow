@@ -7,12 +7,14 @@ from ..dependencies import current_user, oauth2_scheme
 from ..models import TokenRevogado, Usuario
 from ..schemas import LoginResponse, UsuarioOut
 from ..security import create_access_token, verify_password, decode_token
+from ..validators import normalize_email
 
 router = APIRouter(prefix="/auth", tags=["Autenticação"])
 
 @router.post("/login", response_model=LoginResponse)
 def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(Usuario).filter(Usuario.email == form.username).first()
+    email = normalize_email(form.username)
+    user = db.query(Usuario).filter(Usuario.email == email).first()
     if not user or not user.ativo or not verify_password(form.password, user.senha_hash):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="E-mail ou senha inválidos")
     token, _, _ = create_access_token(user.id_usuario)

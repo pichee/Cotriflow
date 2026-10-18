@@ -26,7 +26,11 @@ def get(id_cliente: int, _: Usuario = Depends(current_user), db: Session = Depen
 def update(id_cliente: int, data: ClienteUpdate, _: Usuario = Depends(current_user), db: Session = Depends(get_db)):
     obj = db.get(Cliente, id_cliente)
     if not obj: raise HTTPException(404, "Cliente não encontrado")
-    for k,v in data.model_dump(exclude_unset=True).items(): setattr(obj,k,v)
+    values = data.model_dump(exclude_unset=True)
+    documento = values.get("documento")
+    if documento and db.query(Cliente).filter(Cliente.documento == documento, Cliente.id_cliente != id_cliente).first():
+        raise HTTPException(409, "Documento já cadastrado")
+    for k,v in values.items(): setattr(obj,k,v)
     db.commit(); db.refresh(obj); return obj
 
 @router.delete("/{id_cliente}")

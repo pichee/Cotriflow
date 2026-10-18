@@ -11,6 +11,8 @@ router = APIRouter(prefix="/usuarios", tags=["Usuários"])
 def create_user(data: UsuarioCreate, db: Session):
     if db.query(Usuario).filter(Usuario.email == data.email).first():
         raise HTTPException(409, "E-mail já cadastrado")
+    if data.documento and db.query(Usuario).filter(Usuario.documento == data.documento).first():
+        raise HTTPException(409, "Documento já cadastrado")
     user = Usuario(**data.model_dump(exclude={"senha"}), senha_hash=hash_password(data.senha))
     db.add(user); db.commit(); db.refresh(user); return user
 
@@ -43,6 +45,12 @@ def update(id_usuario: int, data: UsuarioUpdate, _: Usuario = Depends(require_ad
     values = data.model_dump(exclude_unset=True)
     if "senha" in values:
         user.senha_hash = hash_password(values.pop("senha"))
+    email = values.get("email")
+    if email and db.query(Usuario).filter(Usuario.email == email, Usuario.id_usuario != id_usuario).first():
+        raise HTTPException(409, "E-mail já cadastrado")
+    documento = values.get("documento")
+    if documento and db.query(Usuario).filter(Usuario.documento == documento, Usuario.id_usuario != id_usuario).first():
+        raise HTTPException(409, "Documento já cadastrado")
     for key, value in values.items(): setattr(user, key, value)
     db.commit(); db.refresh(user); return user
 
