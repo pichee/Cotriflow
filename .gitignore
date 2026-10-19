@@ -1,58 +1,6 @@
-# Ambientes e Segredos
-.env
-.env.*
-!.env.example
-
-# Bancos de Dados Locais
-*.db
-*.sqlite3
-
-# Python / Backend
+node_modules/
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-env/
+*.pyc
+.env
 venv/
 .venv/
-ENV/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-# Node / Frontend
-node_modules/
-frontend/node_modules/
-dist/
-frontend/dist/
-dist-ssr/
-*.local
-
-# Logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-# Editores e SO
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
