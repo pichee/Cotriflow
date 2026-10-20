@@ -341,25 +341,90 @@ function FormModal({cfg,value,onClose,onSaved}) {
 }
 
 function Pedidos() {
-  const [rows,setRows]=useState([]),[clientes,setClientes]=useState([]),[loading,setLoading]=useState(true),[modal,setModal]=useState(false)
-  async function load(){setLoading(true);try{const [p,c]=await Promise.all([api.get('/pedidos'),api.get('/clientes')]);setRows(p.data);setClientes(c.data)}catch{}finally{setLoading(false)}}
+  const [rows,setRows]=useState([]),[clientes,setClientes]=useState([]),[loading,setLoading]=useState(true),[modal,setModal]=useState(false),[editingOrder,setEditingOrder]=useState(null),[q,setQ]=useState(''),[page,setPage]=useState(1)
+  const pageSize=20
+  async function load(){setLoading(true);try{const [p,c]=await Promise.all([api.get('/pedidos'),api.get('/clientes')]);setRows(Array.isArray(p.data)?p.data:[]);setClientes(Array.isArray(c.data)?c.data:[])}catch{}finally{setLoading(false)}}
   useEffect(()=>{load()},[])
-  async function status(id,status){try{await api.patch(`/pedidos/${id}/status`,{status});load()}catch(e){alert(e.response?.data?.detail||'Erro ao atualizar status.')}}
-  return <><div className="page-head"><div><span className="eyebrow">OPERAÇÃO</span><h1>Pedidos</h1><p>Acompanhe pedidos e entregas.</p></div><button className="primary" onClick={()=>setModal(true)}>+ Novo pedido</button></div>
-  <div className="table-wrap"><table><thead><tr><th>ID</th><th>Cliente</th><th>Data</th><th>Peso total</th><th>Status</th><th>Ações</th></tr></thead><tbody>{loading?<tr><td colSpan="6" className="empty">Carregando...</td></tr>:rows.length===0?<tr><td colSpan="6" className="empty">Nenhum pedido cadastrado.</td></tr>:rows.map(r=><tr key={r.id_pedido||r.id}><td>#{r.id_pedido||r.id}</td><td>{r.cliente?.nome||clientes.find(c=>(c.id_cliente||c.id)===r.cliente_id)?.nome||r.cliente_id||'—'}</td><td>{r.data||r.data_pedido||'—'}</td><td>{r.peso_total??'—'}</td><td><select className="status-select" value={r.status||'PENDENTE'} onChange={e=>status(r.id_pedido||r.id,e.target.value)}>{['PENDENTE','SEPARANDO','EM_ENTREGA','ENTREGUE','CANCELADO'].map(s=><option key={s}>{s}</option>)}</select></td><td><Link className="link-btn" to={`/pedidos/${r.id_pedido||r.id}`}>Detalhes</Link></td></tr>)}</tbody></table></div>
-  {modal&&<PedidoModal clientes={clientes} onClose={()=>setModal(false)} onSaved={()=>{setModal(false);load()}}/>}</>
+  const filtered=useMemo(()=>rows.filter(r=>JSON.stringify(r).toLowerCase().includes(q.toLowerCase())),[rows,q])
+  useEffect(()=>{setPage(1)},[q])
+  const totalPages=Math.ceil(filtered.length/pageSize)||1
+  const paginated=useMemo(()=>filtered.slice((page-1)*pageSize,page*pageSize),[filtered,page])
+  async function status(id,status){try{await api.put(`/pedidos/${id}`,{status});load()}catch(e){alert(e.response?.data?.detail||'Erro ao atualizar status.')}}
+  async function remove(id){if(!confirm('Excluir este pedido?'))return;try{await api.delete(`/pedidos/${id}`);load()}catch(e){alert(e.response?.data?.detail||'Não foi possível excluir.')}}
+  return <><div className="page-head"><div><span className="eyebrow">OPERAÇÃO</span><h1>Pedidos</h1><p>Acompanhe pedidos e entregas.</p></div><button className="primary" onClick={()=>{setEditingOrder(null);setModal(true)}}>+ Novo pedido</button></div>
+  <div className="toolbar"><input placeholder="Pesquisar pedidos por cliente, produto, endereço ou status..." value={q} onChange={e=>setQ(e.target.value)}/></div>
+  <div className="table-wrap"><table><thead><tr><th>ID</th><th>Cliente</th><th>Produtos</th><th>Endereço de Entrega</th><th>Data</th><th>Peso Total (Kg)</th><th>Status</th><th>Ações</th></tr></thead><tbody>
+    {loading?<tr><td colSpan="8" className="empty">Carregando...</td></tr>:filtered.length===0?<tr><td colSpan="8" className="empty">Nenhum pedido cadastrado.</td></tr>:paginated.map(r=><tr key={r.id_pedido||r.id}>
+      <td>#{r.id_pedido||r.id}</td>
+      <td>{r.cliente_nome||r.cliente?.nome||clientes.find(c=>(c.id_cliente||c.id)===(r.id_cliente||r.cliente_id))?.nome||r.id_cliente||'—'}</td>
+      <td>{Array.isArray(r.produtos)&&r.produtos.length>0 ? r.produtos.map(p=>`${p.nome} (${p.quantidade}x)`).join(', ') : '—'}</td>
+      <td>{r.endereco_entrega||'—'}</td>
+      <td>{formatCell(r.data||r.data_pedido, 'date')}</td>
+      <td>{r.peso_total??'—'}</td>
+      <td><select className="status-select" value={r.status||'PENDENTE'} onChange={e=>status(r.id_pedido||r.id,e.target.value)}>{['PENDENTE','SEPARANDO','EM_ENTREGA','ENTREGUE','CANCELADO'].map(s=><option key={s}>{s}</option>)}</select></td>
+      <td><button className="link-btn" onClick={()=>{setEditingOrder(r);setModal(true)}}>Editar</button><button className="danger-btn" onClick={()=>remove(r.id_pedido||r.id)}>Excluir</button></td>
+    </tr>)}
+  </tbody></table></div>
+  {filtered.length>pageSize&&<div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:16,flexWrap:'wrap',gap:8}}>
+    <span className="muted">Total: {filtered.length} pedidos (Página {page} de {totalPages})</span>
+    <div style={{display:'flex',gap:8}}>
+      <button className="secondary" disabled={page<=1} onClick={()=>setPage(p=>p-1)}>Anterior</button>
+      <button className="secondary" disabled={page>=totalPages} onClick={()=>setPage(p=>p+1)}>Próxima</button>
+    </div>
+  </div>}
+  {modal&&<PedidoModal clientes={clientes} initialOrder={editingOrder} onClose={()=>{setModal(false);setEditingOrder(null)}} onSaved={()=>{setModal(false);setEditingOrder(null);load()}}/>}</>
 }
 
-function PedidoModal({clientes,onClose,onSaved}) {
-  const [form,setForm]=useState({cliente_id:'',endereco_entrega:'',observacoes:''}),[items,setItems]=useState([{produto_id:'',quantidade:1}]),[products,setProducts]=useState([]),[saving,setSaving]=useState(false),[error,setError]=useState('')
-  useEffect(()=>{api.get('/produtos').then(r=>setProducts(r.data)).catch(()=>{})},[])
+function PedidoModal({clientes,initialOrder,onClose,onSaved}) {
+  const isEdit = Boolean(initialOrder?.id_pedido || initialOrder?.id)
+  const [form,setForm]=useState(()=>({
+    id_cliente: initialOrder?.id_cliente || initialOrder?.cliente_id || '',
+    endereco_entrega: initialOrder?.endereco_entrega || '',
+    status: initialOrder?.status || 'PENDENTE'
+  }))
+  const [items,setItems]=useState(()=>{
+    if (Array.isArray(initialOrder?.produtos) && initialOrder.produtos.length > 0) {
+      return initialOrder.produtos.map(p => ({ id_produto: p.id_produto, quantidade: p.quantidade }))
+    }
+    return [{id_produto:'',quantidade:1}]
+  })
+  const [products,setProducts]=useState([]),[propriedades,setPropriedades]=useState([]),[saving,setSaving]=useState(false),[error,setError]=useState('')
+  useEffect(()=>{
+    api.get('/produtos').then(r=>setProducts(Array.isArray(r.data)?r.data:[])).catch(()=>{})
+    api.get('/propriedades').then(r=>setPropriedades(Array.isArray(r.data)?r.data:[])).catch(()=>{})
+  },[])
+  function onSelectCliente(idCli) {
+    const propCli = propriedades.find(p => Number(p.id_cliente) === Number(idCli))
+    setForm(f => ({
+      ...f,
+      id_cliente: idCli,
+      endereco_entrega: (!f.endereco_entrega && propCli) ? `${propCli.nome} — ${propCli.localizacao}` : f.endereco_entrega
+    }))
+  }
   function upd(i,k,v){setItems(a=>a.map((x,n)=>n===i?{...x,[k]:v}:x))}
-  async function submit(e){e.preventDefault();setSaving(true);try{await api.post('/pedidos',{...form,cliente_id:Number(form.cliente_id),itens:items.map(x=>({produto_id:Number(x.produto_id),quantidade:Number(x.quantidade)}))});onSaved()}catch(e){setError(e.response?.data?.detail||'Erro ao criar pedido.')}finally{setSaving(false)}}
-  return <div className="modal-backdrop"><div className="modal wide"><div className="modal-head"><h3>Novo pedido</h3><button className="icon" onClick={onClose}><X/></button></div><form onSubmit={submit}>
-    <label>Cliente<select value={form.cliente_id} onChange={e=>setForm({...form,cliente_id:e.target.value})} required><option value="">Selecione...</option>{clientes.map(c=><option key={c.id_cliente||c.id} value={c.id_cliente||c.id}>{c.nome}</option>)}</select></label>
-    <label>Endereço de entrega<input value={form.endereco_entrega} onChange={e=>setForm({...form,endereco_entrega:e.target.value})}/></label>
-    <h4>Produtos</h4>{items.map((it,i)=><div className="item-row" key={i}><select value={it.produto_id} onChange={e=>upd(i,'produto_id',e.target.value)} required><option value="">Produto...</option>{products.map(p=><option key={p.id_produto||p.id} value={p.id_produto||p.id}>{p.nome}</option>)}</select><input type="number" min="1" value={it.quantidade} onChange={e=>upd(i,'quantidade',e.target.value)} /><button type="button" className="danger-btn" onClick={()=>setItems(a=>a.filter((_,n)=>n!==i))}>Remover</button></div>)}<button type="button" className="secondary" onClick={()=>setItems(a=>[...a,{produto_id:'',quantidade:1}])}>+ Produto</button>
-    {error&&<div className="error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={saving}>{saving?'Criando...':'Criar pedido'}</button></div>
+  async function submit(e){
+    e.preventDefault();setSaving(true);setError('')
+    try{
+      const payload = {
+        id_cliente: Number(form.id_cliente),
+        endereco_entrega: form.endereco_entrega,
+        produtos: items.filter(x=>x.id_produto).map(x=>({id_produto:Number(x.id_produto),quantidade:Number(x.quantidade)}))
+      }
+      if (isEdit) {
+        payload.status = form.status
+        await api.put(`/pedidos/${initialOrder.id_pedido||initialOrder.id}`, payload)
+      } else {
+        await api.post('/pedidos', payload)
+      }
+      onSaved()
+    }catch(e){setError(apiError(e,'Erro ao salvar pedido.'))}finally{setSaving(false)}
+  }
+  return <div className="modal-backdrop"><div className="modal wide"><div className="modal-head"><h3>{isEdit?'Editar pedido':'Novo pedido'}</h3><button className="icon" onClick={onClose}><X/></button></div><form onSubmit={submit}>
+    <label>Cliente<select value={form.id_cliente} onChange={e=>onSelectCliente(e.target.value)} required><option value="">Selecione...</option>{clientes.map(c=><option key={c.id_cliente||c.id} value={c.id_cliente||c.id}>{c.nome}</option>)}</select></label>
+    <label>Endereço de entrega<input value={form.endereco_entrega} onChange={e=>setForm({...form,endereco_entrega:e.target.value})} required/></label>
+    {isEdit && <label>Status<select value={form.status} onChange={e=>setForm({...form,status:e.target.value})}>{['PENDENTE','SEPARANDO','EM_ENTREGA','ENTREGUE','CANCELADO'].map(s=><option key={s} value={s}>{s}</option>)}</select></label>}
+    <h4>Produtos</h4>{items.map((it,i)=><div className="item-row" key={i}><select value={it.id_produto} onChange={e=>upd(i,'id_produto',e.target.value)} required><option value="">Produto...</option>{products.map(p=><option key={p.id_produto||p.id} value={p.id_produto||p.id}>{p.nome}</option>)}</select><input type="number" min="1" step="any" value={it.quantidade} onChange={e=>upd(i,'quantidade',e.target.value)} required/><button type="button" className="danger-btn" onClick={()=>setItems(a=>a.filter((_,n)=>n!==i))}>Remover</button></div>)}<button type="button" className="secondary" onClick={()=>setItems(a=>[...a,{id_produto:'',quantidade:1}])}>+ Produto</button>
+    {error&&<div className="error">{error}</div>}<div className="modal-actions"><button type="button" className="secondary" onClick={onClose}>Cancelar</button><button className="primary" disabled={saving}>{saving?'Salvando...':(isEdit?'Salvar alterações':'Criar pedido')}</button></div>
   </form></div></div>
 }
 
